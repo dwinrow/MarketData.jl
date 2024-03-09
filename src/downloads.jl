@@ -210,3 +210,132 @@ end
 
 # For compatibility with earlier versions
 ons(timeseries::AbstractString, dataset::AbstractString) = ons(timeseries)
+"""
+  searchft(searchstr::String;assetClass="")
+
+Search FT for string, return array of results
+"""
+function searchft(searchstr::AbstractString;assetClass="")
+  url = "https://markets.ft.com/data/searchapi/searchsecurities"
+  res = HTTP.get(url, query = Dict("query"=>searchstr))
+  @assert res.status == 200
+  results = JSON3.read(res.body)["data"]["security"]
+  filter(x->contains(x["assetClass"],assetClass),results)
+end
+
+"""
+    ft(symbol::Int;  startdate=today()-Year(1),dataPeriod="Day")::TimeArray
+    ft(sym::AbstractString;  startdate=today()-Year(1),dataPeriod="Day")::TimeArray
+    ft(sym::Symbol, opt::FTOpt = FTOpt())::TimeArray
+
+This is a wrapper for downloading historical stock prices from FT.
+
+The ft method takes a stock name or isin in the form of a string and returns a
+`TimeSeries.TimeArray` corresponding to the FT ticker.
+With no argument, the default historical time series is FTSE 100.
+
+# Examples
+
+```julia
+AAPL = ft(:AAPL)
+SPX = 
+NQ = 
+```
+
+```jl-repl
+julia> start = Date(2018, 1, 1)
+2018-01-01
+
+julia> ft(:AAPL;  startdate = start, dataPeriod = "Month")
+75×4 TimeArray{Float64, 2, DateTime, Matrix{Float64}} 2018-01-01T00:00:00 to 2024-03-01T00:00:00
+...
+```
+
+# References
+
+    https://markets.ft.com/
+
+# See Also
+
+- yahoo() which accesses the Yahoo Finance API
+- fred()  which accesses the St. Louis Federal Reserve financial and economic data sets.
+- ons()   which is a wrapper to download financial and economic time series data from the Office for National Statistics (ONS).
+"""
+function ft(sym::AbstractString = "FTSE:FSI"; kwargs...)
+  res = searchft(sym)
+  if isempty(res)
+    throw("No results in FT found for: $sym")
+  end
+  # TODO Communicate selection made 
+  ft(parse(Int,res[1]["xid"]);kwargs...)
+end
+ft(sym::Symbol; kwargs...) = ft(string(sym);kwargs...)
+function ft(symbol::Int;  startdate=today()-Year(1), dataperiod="Day")
+  if  dataperiod != "Day"
+     startdate -= Day(1)
+  end
+  body = Dict(
+    :days               => (today()- startdate).value,    
+    :dataNormalized     => false,
+    :dataPeriod         =>  dataperiod,
+    :timeServiceFormat  => "JSON",
+    :returnDateType     => "ISO8601",
+    :elements           => [
+        Dict(
+            :Type              => "price",
+            :Symbol            => "$symbol",
+        )
+    ]
+  )
+  url = "https://markets.ft.com/data/chartapi/series"
+  headers = Dict("Content-Type"=>"application/json")
+  res  = HTTP.get(url, headers; body = JSON3.write(body))
+  j = JSON3.read(String(res.body))
+  dates = Date.(DateTime.(j["Dates"]))
+  names = Tuple([Symbol(component["Type"]) for component in j[:Elements][1][:ComponentSeries]])
+  data = [copy(component["Values"]) for component in j[:Elements][1][:ComponentSeries]]
+  data = NamedTuple{names}(data)
+  data = merge(data,(timestamp=dates,))
+  TimeArray(data;timestamp=:timestamp,meta=j)
+end
+
+# FULL ft API CALL
+#=
+
+body = Dict(
+    :days               => 180,    
+    :dataNormalized     => false   ,
+    :dataPeriod         => "Day"  ,
+    :dataInterval       => 1      ,
+    :realtime           => false  ,
+    :yFormat            => "0.###",
+    :timeServiceFormat  => "JSON",
+    :rulerIntradayStart => 26,
+    :rulerIntradayStop  => 3,
+    :rulerInterdayStart => 10957,
+    :rulerInterdayStop  => 365,
+    :returnDateType     => "ISO8601",
+    :elements           => [
+        Dict(
+            :Label             => "ba9e1304",
+            :Type              => "price",
+            :Symbol            => "46487964",
+            :OverlayIndicators => [],
+            :Params            => Dict(),
+            :ValueMultiplier   => 100,
+            :ValueFormat       => "{0:#,##0.######}"
+        )
+        Dict(
+            :Label             => "54040a56",
+            :Type              => "price",
+            :Symbol            => "643586494",
+            :OverlayIndicators => [],
+            :Params            => Dict(),
+            :ValueMultiplier   => 100,
+            :ValueFormat       => "{0:#,##0.######}"
+        )
+    ]
+)
+=#
+# For compatibility with earlier versions
+ons(timeseries::AbstractString, dataset::AbstractString) = ons(timeseries)
