@@ -8,6 +8,7 @@ using Random
 using Reexport
 using TimeSeries
 using JSON3
+using EzXML
 
 @reexport using TimeSeries
 
@@ -18,7 +19,7 @@ export random_cl, random_vol, random_ohlc, random_ohlcv
 # downloads.jl
 export AbstractQueryOpt,
        YahooOpt,
-       yahoo, fred, ons
+       yahoo, fred, ons, ft
 
 ###### include ##################
 
