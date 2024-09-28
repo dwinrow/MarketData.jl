@@ -199,7 +199,7 @@ end
 
 Search FT for string, return array of results
 """
-function searchft(searchstr::String;assetClass="")
+function searchft(searchstr::AbstractString;assetClass="")
   url = "https://markets.ft.com/data/searchapi/searchsecurities"
   res = HTTP.get(url, query = Dict("query"=>searchstr))
   @assert res.status == 200
@@ -208,8 +208,8 @@ function searchft(searchstr::String;assetClass="")
 end
 
 """
-    ft(symbol::Int; startDate=today()-Year(1),dataPeriod="Day")::TimeArray
-    ft(sym::AbstractString; startDate=today()-Year(1),dataPeriod="Day")::TimeArray
+    ft(symbol::Int;  startdate=today()-Year(1),dataPeriod="Day")::TimeArray
+    ft(sym::AbstractString;  startdate=today()-Year(1),dataPeriod="Day")::TimeArray
     ft(sym::Symbol, opt::FTOpt = FTOpt())::TimeArray
 
 This is a wrapper for downloading historical stock prices from FT.
@@ -230,7 +230,7 @@ NQ =
 julia> start = Date(2018, 1, 1)
 2018-01-01
 
-julia> ft(:AAPL; startDate = start, dataPeriod = "Month")
+julia> ft(:AAPL;  startdate = start, dataPeriod = "Month")
 75×4 TimeArray{Float64, 2, DateTime, Matrix{Float64}} 2018-01-01T00:00:00 to 2024-03-01T00:00:00
 ...
 ```
@@ -247,18 +247,21 @@ julia> ft(:AAPL; startDate = start, dataPeriod = "Month")
 """
 function ft(sym::AbstractString = "FTSE:FSI"; kwargs...)
   res = searchft(sym)
+  if isempty(res)
+    throw("No results in FT found for: $sym")
+  end
   # TODO Communicate selection made 
   ft(parse(Int,res[1]["xid"]);kwargs...)
 end
 ft(sym::Symbol; kwargs...) = ft(string(sym);kwargs...)
-function ft(symbol::Int; startDate=today()-Year(1),dataPeriod="Day")
-  if dataPeriod != "Day"
-    startDate -= Day(1)
+function ft(symbol::Int;  startdate=today()-Year(1), dataperiod="Day")
+  if  dataperiod != "Day"
+     startdate -= Day(1)
   end
   body = Dict(
-    :days               => (today()-startDate).value,    
+    :days               => (today()- startdate).value,    
     :dataNormalized     => false,
-    :dataPeriod         => dataPeriod,
+    :dataPeriod         =>  dataperiod,
     :timeServiceFormat  => "JSON",
     :returnDateType     => "ISO8601",
     :elements           => [
@@ -272,10 +275,12 @@ function ft(symbol::Int; startDate=today()-Year(1),dataPeriod="Day")
   headers = Dict("Content-Type"=>"application/json")
   res  = HTTP.get(url, headers; body = JSON3.write(body))
   j = JSON3.read(String(res.body))
-  dates = DateTime.(j["Dates"])
-  data = [component["Type"] => copy(component["Values"]) for component in j[:Elements][1][:ComponentSeries]]
-  data = Dict(vcat(data,["timestamp"=>dates]))
-  TimeArray(data;timestamp=:timestamp)
+  dates = Date.(DateTime.(j["Dates"]))
+  names = Tuple([Symbol(component["Type"]) for component in j[:Elements][1][:ComponentSeries]])
+  data = [copy(component["Values"]) for component in j[:Elements][1][:ComponentSeries]]
+  data = NamedTuple{names}(data)
+  data = merge(data,(timestamp=dates,))
+  TimeArray(data;timestamp=:timestamp,meta=j)
 end
 
 # FULL ft API CALL
