@@ -147,6 +147,7 @@ end
 
 """
     ons(timeseries::String="L522")::TimeArray
+    ons(timeseries::String="L522")::TimeArray
 
 The ons() method is a wrapper to download financial and economic time series data from the Office for National Statistics (ONS).
 
@@ -164,6 +165,9 @@ is the Consumer Price Index including housing costs (CPIH) which is the ONS’s 
 UK_RPI = ("CHAW")
 UK_CPI = ("D7BT")
 UK_CPIH = ("L522")
+UK_RPI = ("CHAW")
+UK_CPI = ("D7BT")
+UK_CPIH = ("L522")
 ```
 
 # References
@@ -178,10 +182,6 @@ https://www.ons.gov.uk/timeseriestool
 function ons(timeseries::AbstractString = "L522")
     url = "https://api.beta.ons.gov.uk/v1/search?content_type=timeseries&cdids=$timeseries"
     res = HTTP.get(url)
-    @assert res.status == 200
-    json = JSON3.read(HTTP.payload(res))
-    uri = json["items"][1]["uri"]
-    res = HTTP.get("https://api.beta.ons.gov.uk/v1/data?uri=$uri")
     @assert res.status == 200
     json = JSON3.read(HTTP.payload(res))
     ta = nothing
@@ -337,4 +337,3 @@ body = Dict(
     ]
 )
 =#
-# For compatibility with earlier versions
