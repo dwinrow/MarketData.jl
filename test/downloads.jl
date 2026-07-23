@@ -21,4 +21,10 @@ using Test
         ta = ons()
         @test ta |> timestamp |> length > 100
     end
+
+    @testset "FT" begin
+        ta = ft()
+        @test ta |> timestamp |> length > 100
+    end
+
 end
