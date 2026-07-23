@@ -91,12 +91,22 @@ julia> yahoo(:AAPL, YahooOpt(period1 = start))
 """
 function yahoo(sym::AbstractString = "^GSPC", opt::YahooOpt = YahooOpt())
     host = rand(["query1", "query2"])
-    url  = "https://$host.finance.yahoo.com/v7/finance/download/$sym"
+    url  = "https://$host.finance.yahoo.com/v8/finance/chart/$sym"
     res  = HTTP.get(url, query = opt)
     @assert res.status == 200
-    csv = CSV.File(res.body, missingstring = "null")
-    sch = TimeSeries.Tables.schema(csv)
-    TimeArray(csv, timestamp = first(sch.names)) |> cleanup_colname!
+
+    json_arr = JSON3.read(res.body)
+    quotes = json_arr.chart.result[1].indicators.quote[1]
+    input_table = (; timestamp = Dates.Date.(Dates.unix2datetime.(json_arr.chart.result[1].timestamp)),
+                   Open = Vector(quotes.open),
+                   High = Vector(quotes.high),
+                   Low = Vector(quotes.low),
+                   Close = Vector(quotes.close),
+                   AdjClose = Vector(json_arr.chart.result[1].indicators.adjclose[1].adjclose),
+                   Volume = Vector(quotes.volume)
+                  )
+
+    TimeArray(input_table, timestamp = :timestamp)
 end
 
 yahoo(s::Symbol, opt::YahooOpt = YahooOpt()) = yahoo(string(s), opt)
@@ -136,7 +146,7 @@ function fred(data::AbstractString="CPIAUCNS")
 end
 
 """
-    ons(timeseries::String="L522", dataset::String="MM23")::TimeArray
+    ons(timeseries::String="L522")::TimeArray
 
 The ons() method is a wrapper to download financial and economic time series data from the Office for National Statistics (ONS).
 
@@ -151,9 +161,9 @@ is the Consumer Price Index including housing costs (CPIH) which is the ONS’s 
 # Examples
 
 ```julia
-UK_RPI = ("CHAW","MM23")
-UK_CPI = ("D7BT","MM23")
-UK_CPIH = ("L522","MM23")
+UK_RPI = ("CHAW")
+UK_CPI = ("D7BT")
+UK_CPIH = ("L522")
 ```
 
 # References
@@ -165,9 +175,13 @@ https://www.ons.gov.uk/timeseriestool
 - fred() which accesses the St. Louis Federal Reserve financial and economic data sets.
 - yahoo() which is a wrapper from downloading financial time series for stocks from Yahoo Finance.
 """
-function ons(timeseries::AbstractString = "L522", dataset::AbstractString = "MM23")
-    url = "https://api.ons.gov.uk/dataset/$dataset/timeseries/$timeseries/data"
+function ons(timeseries::AbstractString = "L522")
+    url = "https://api.beta.ons.gov.uk/v1/search?content_type=timeseries&cdids=$timeseries"
     res = HTTP.get(url)
+    @assert res.status == 200
+    json = JSON3.read(HTTP.payload(res))
+    uri = json["items"][1]["uri"]
+    res = HTTP.get("https://api.beta.ons.gov.uk/v1/data?uri=$uri")
     @assert res.status == 200
     json = JSON3.read(HTTP.payload(res))
     ta = nothing
@@ -194,6 +208,8 @@ function ons(timeseries::AbstractString = "L522", dataset::AbstractString = "MM2
     TimeArray(ta, meta = json["description"])
 end
 
+# For compatibility with earlier versions
+ons(timeseries::AbstractString, dataset::AbstractString) = ons(timeseries)
 """
   searchft(searchstr::String;assetClass="")
 
