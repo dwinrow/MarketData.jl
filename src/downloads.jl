@@ -95,7 +95,7 @@ function yahoo(sym::AbstractString = "^GSPC", opt::YahooOpt = YahooOpt())
     res  = HTTP.get(url, query = opt)
     @assert res.status == 200
 
-    json_arr = JSON3.read(res.body)
+    json_arr = JSON.parse(res.body)
     quotes = json_arr.chart.result[1].indicators.quote[1]
     input_table = (; timestamp = Dates.Date.(Dates.unix2datetime.(json_arr.chart.result[1].timestamp)),
                    Open = Vector(quotes.open),
@@ -179,11 +179,11 @@ function ons(timeseries::AbstractString = "L522")
     url = "https://api.beta.ons.gov.uk/v1/search?content_type=timeseries&cdids=$timeseries"
     res = HTTP.get(url)
     @assert res.status == 200
-    json = JSON3.read(HTTP.payload(res))
+    json = JSON.parse(HTTP.payload(res))
     uri = json["items"][1]["uri"]
     res = HTTP.get("https://api.beta.ons.gov.uk/v1/data?uri=$uri")
     @assert res.status == 200
-    json = JSON3.read(HTTP.payload(res))
+    json = JSON.parse(HTTP.payload(res))
     ta = nothing
     if "months" in keys(json)
         data = json["months"]
@@ -219,7 +219,7 @@ function searchft(searchstr::AbstractString;assetClass="")
   url = "https://markets.ft.com/data/searchapi/searchsecurities"
   res = HTTP.get(url, query = Dict("query"=>searchstr))
   @assert res.status == 200
-  results = JSON3.read(res.body)["data"]["security"]
+  results = JSON.parse(res.body)["data"]["security"]
   filter(x->contains(x["assetClass"],assetClass),results)
 end
 
@@ -289,8 +289,8 @@ function ft(symbol::Int;  startdate=today()-Year(1), dataperiod="Day")
   )
   url = "https://markets.ft.com/data/chartapi/series"
   headers = Dict("Content-Type"=>"application/json")
-  res  = HTTP.get(url, headers; body = JSON3.write(body))
-  j = JSON3.read(String(res.body))
+  res  = HTTP.get(url, headers; body = JSON.json(body))
+  j = JSON.parse(String(res.body))
   dates = Date.(DateTime.(j["Dates"]))
   names = Tuple([Symbol(component["Type"]) for component in j[:Elements][1][:ComponentSeries]])
   data = [copy(component["Values"]) for component in j[:Elements][1][:ComponentSeries]]
